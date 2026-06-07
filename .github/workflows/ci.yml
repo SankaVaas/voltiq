@@ -35,7 +35,7 @@ jobs:
         run: ruff format --check .
 
       - name: Mypy
-        run: mypy core/ api/ agents/ --ignore-missing-imports
+        run: mypy core/ api/ agents/ --ignore-missing-imports --explicit-package-bases
 
   # ── Unit tests ────────────────────────────────────────────────────────────────
   test:
