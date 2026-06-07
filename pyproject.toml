@@ -91,8 +91,10 @@ exclude = ["tests*", "notebooks*", "docs*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "ANN", "S", "B", "A", "C4", "PT"]
-ignore = ["ANN101", "ANN102", "S101"]
+ignore = ["S101", "ANN401"]
 
 [tool.mypy]
 python_version = "3.11"

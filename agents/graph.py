@@ -31,8 +31,9 @@ import json
 from typing import Annotated, Any, TypedDict
 
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
+from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
 
 from core.config import settings
@@ -110,6 +111,7 @@ Respond ONLY with JSON: {"type": "...", "country": "..."}
 def ingest_agent(state: AgentState) -> AgentState:
     """Fetch latest data for the requested country."""
     from datetime import datetime, timedelta
+
     from data.ingest import build_feature_dataset
 
     try:
@@ -181,9 +183,11 @@ def forecast_agent(state: AgentState) -> AgentState:
 
 def anomaly_agent(state: AgentState) -> AgentState:
     """Run LSTM Autoencoder anomaly detection on recent load data."""
-    import numpy as np
-    from anomaly.detector import AnomalyDetector
     from pathlib import Path
+
+    import numpy as np
+
+    from anomaly.detector import AnomalyDetector
 
     try:
         # Synthetic recent series for demo (replace with real data from ingest)
@@ -232,7 +236,9 @@ def qa_agent(state: AgentState) -> AgentState:
         # Fall back to LLM-only if Qdrant is not running
         llm = _get_llm()
         response = llm.invoke([
-            SystemMessage(content="You are a grid operations assistant. Answer based on general knowledge."),
+            SystemMessage(
+                content="You are a grid operations assistant. Answer based on general knowledge."
+            ),
             HumanMessage(content=state["query"]),
         ])
         result = {
@@ -304,7 +310,7 @@ def should_run_qa(state: AgentState) -> str:
 
 # ── Build graph ───────────────────────────────────────────────────────────────
 
-def build_graph() -> Any:
+def build_graph() -> CompiledGraph:
     """Compile and return the Voltiq LangGraph agent graph."""
     graph = StateGraph(AgentState)
 

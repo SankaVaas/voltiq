@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # ── API ──────────────────────────────────────────────────────────────────
-    api_host: str = "0.0.0.0"
+    api_host: str = "127.0.0.1"  # override to 0.0.0.0 in Docker via .env
     api_port: int = 8000
     api_workers: int = 1
     api_secret_key: str = Field(default="dev-secret", min_length=8)
