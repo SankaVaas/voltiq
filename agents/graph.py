@@ -247,7 +247,7 @@ def qa_agent(state: AgentState) -> AgentState:
                 SystemMessage(
                     content="You are a grid operations assistant. Answer based on general knowledge."
                 ),
-                HumanMessage(content=state["query"]),
+                HumanMessage(content=str(state["query"])),
             ]
         )
         result = {

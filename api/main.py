@@ -15,7 +15,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from api.middleware.logging import LoggingMiddleware
 from api.middleware.metrics import MetricsMiddleware
-from api.routers import agents, anomalies, forecast, health, ingest
+from api.routers import anomalies, forecast, health, ingest, router_agents
 from core.config import settings
 from core.logging import get_logger, setup_logging
 
@@ -51,7 +51,7 @@ app.add_middleware(LoggingMiddleware)
 app.add_middleware(MetricsMiddleware)
 
 app.include_router(health.router, tags=["Health"])
-app.include_router(agents.router, prefix="/api/v1", tags=["Agent"])
+app.include_router(router_agents.router, prefix="/api/v1", tags=["Agent"])
 app.include_router(forecast.router, prefix="/api/v1", tags=["Forecast"])
 app.include_router(anomalies.router, prefix="/api/v1", tags=["Anomalies"])
 app.include_router(ingest.router, prefix="/api/v1", tags=["Ingest"])
