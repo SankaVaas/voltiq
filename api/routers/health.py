@@ -23,6 +23,7 @@ async def health_check() -> HealthResponse:
 
     # MLflow (just check URL reachability)
     import httpx
+
     try:
         async with httpx.AsyncClient(timeout=2) as client:
             r = await client.get(f"{settings.mlflow_tracking_uri}/health")

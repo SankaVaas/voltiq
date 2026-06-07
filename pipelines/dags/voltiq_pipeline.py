@@ -19,6 +19,7 @@ try:
     from airflow import DAG
     from airflow.operators.python import PythonOperator
     from airflow.utils.dates import days_ago
+
     AIRFLOW_AVAILABLE = True
 except ImportError:
     AIRFLOW_AVAILABLE = False
@@ -77,15 +78,19 @@ def task_retrain_forecast(**context):
     with mlflow.start_run(run_name=f"tft_daily_{datetime.utcnow().date()}"):
         # In production: run full TFT training loop
         # For scaffold: log placeholder metrics
-        mlflow.log_params({
-            "model": "tft",
-            "horizon": settings.forecast_horizon,
-            "lookback": settings.forecast_lookback,
-        })
-        mlflow.log_metrics({
-            "val_mae": 1250.0,  # placeholder
-            "val_rmse": 1680.0,
-        })
+        mlflow.log_params(
+            {
+                "model": "tft",
+                "horizon": settings.forecast_horizon,
+                "lookback": settings.forecast_lookback,
+            }
+        )
+        mlflow.log_metrics(
+            {
+                "val_mae": 1250.0,  # placeholder
+                "val_rmse": 1680.0,
+            }
+        )
         print("TFT retraining complete (scaffold)")
 
 
@@ -108,7 +113,9 @@ def task_retrain_anomaly(**context):
         detector = AnomalyDetector()
         losses = detector.train(series, epochs=20)
 
-        mlflow.log_params({"window_size": detector.window_size, "threshold_pct": detector.threshold_percentile})
+        mlflow.log_params(
+            {"window_size": detector.window_size, "threshold_pct": detector.threshold_percentile}
+        )
         mlflow.log_metrics({"final_train_loss": losses[-1], "threshold": detector.threshold or 0.0})
 
         model_path = Path(settings.model_artifact_dir) / "anomaly_detector.pt"
@@ -140,6 +147,7 @@ def task_run_llm_eval(**context):
 def task_notify(**context):
     """Log DAG completion summary."""
     from core.logging import get_logger
+
     logger = get_logger("airflow.notify")
     logger.info(
         "Voltiq daily pipeline completed",
@@ -157,10 +165,11 @@ if AIRFLOW_AVAILABLE:
         catchup=False,
         tags=["voltiq", "mlops", "energy"],
     ) as dag:
-
         ingest = PythonOperator(task_id="ingest_data", python_callable=task_ingest_data)
         preprocess = PythonOperator(task_id="preprocess_data", python_callable=task_preprocess_data)
-        retrain_fc = PythonOperator(task_id="retrain_forecast", python_callable=task_retrain_forecast)
+        retrain_fc = PythonOperator(
+            task_id="retrain_forecast", python_callable=task_retrain_forecast
+        )
         retrain_an = PythonOperator(task_id="retrain_anomaly", python_callable=task_retrain_anomaly)
         rag_ingest = PythonOperator(task_id="ingest_rag_docs", python_callable=task_ingest_rag_docs)
         llm_eval = PythonOperator(task_id="run_llm_eval", python_callable=task_run_llm_eval)

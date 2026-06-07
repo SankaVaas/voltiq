@@ -30,6 +30,7 @@ class TestSettings:
 class TestLSTMAutoencoder:
     def test_forward_pass(self):
         from anomaly.detector import LSTMAutoencoder
+
         model = LSTMAutoencoder(window_size=24, hidden_size=32, latent_dim=8, num_layers=1)
         x = torch.randn(4, 24, 1)  # (batch, seq, features)
         recon = model(x)
@@ -37,6 +38,7 @@ class TestLSTMAutoencoder:
 
     def test_reconstruction_error_shape(self):
         from anomaly.detector import LSTMAutoencoder
+
         model = LSTMAutoencoder(window_size=24, hidden_size=32, latent_dim=8, num_layers=1)
         x = torch.randn(8, 24, 1)
         err = model.reconstruction_error(x)
@@ -113,15 +115,18 @@ class TestTFT:
 class TestAPISchemas:
     def test_query_request_valid(self):
         from api.schemas import QueryRequest
+
         req = QueryRequest(query="What is the forecast for Germany?", country="de")
         assert req.country == "DE"
 
     def test_query_request_invalid_country(self):
         from api.schemas import QueryRequest
+
         with pytest.raises(Exception):
             QueryRequest(query="test query here", country="XX")
 
     def test_query_request_too_short(self):
         from api.schemas import QueryRequest
+
         with pytest.raises(Exception):
             QueryRequest(query="hi")

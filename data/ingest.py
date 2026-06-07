@@ -153,13 +153,15 @@ def fetch_weather(
         inclusive="left",
     )
 
-    df = pd.DataFrame({
-        "timestamp": timestamps,
-        "temperature_2m": hourly.Variables(0).ValuesAsNumpy(),
-        "wind_speed_10m": hourly.Variables(1).ValuesAsNumpy(),
-        "shortwave_radiation": hourly.Variables(2).ValuesAsNumpy(),
-        "country": country,
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "temperature_2m": hourly.Variables(0).ValuesAsNumpy(),
+            "wind_speed_10m": hourly.Variables(1).ValuesAsNumpy(),
+            "shortwave_radiation": hourly.Variables(2).ValuesAsNumpy(),
+            "country": country,
+        }
+    )
 
     out_path = RAW_DIR / f"weather_{country}_{start.date()}_{end.date()}.parquet"
     df.to_parquet(out_path, index=False)
@@ -168,6 +170,7 @@ def fetch_weather(
 
 
 # ── Combined dataset ──────────────────────────────────────────────────────────
+
 
 def build_feature_dataset(
     country: str = "DE",

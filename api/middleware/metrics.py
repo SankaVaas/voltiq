@@ -1,4 +1,5 @@
 """api/middleware/metrics.py — Prometheus instrumentation."""
+
 from __future__ import annotations
 
 import time

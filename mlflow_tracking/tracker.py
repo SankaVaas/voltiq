@@ -44,13 +44,16 @@ def log_forecast_metrics(
     pinball_loss_p90: float,
     step: int | None = None,
 ) -> None:
-    mlflow.log_metrics({
-        "mae": mae,
-        "rmse": rmse,
-        "mape": mape,
-        "pinball_p10": pinball_loss_p10,
-        "pinball_p90": pinball_loss_p90,
-    }, step=step)
+    mlflow.log_metrics(
+        {
+            "mae": mae,
+            "rmse": rmse,
+            "mape": mape,
+            "pinball_p10": pinball_loss_p10,
+            "pinball_p90": pinball_loss_p90,
+        },
+        step=step,
+    )
 
 
 def log_tft_params(config_dict: dict[str, Any]) -> None:

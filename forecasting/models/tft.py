@@ -80,10 +80,12 @@ class VariableSelectionNetwork(nn.Module):
     ) -> None:
         super().__init__()
         self.num_inputs = num_inputs
-        self.single_variable_grns = nn.ModuleList([
-            GatedResidualNetwork(input_dim, hidden_dim, hidden_dim, dropout)
-            for _ in range(num_inputs)
-        ])
+        self.single_variable_grns = nn.ModuleList(
+            [
+                GatedResidualNetwork(input_dim, hidden_dim, hidden_dim, dropout)
+                for _ in range(num_inputs)
+            ]
+        )
         self.variable_selector = GatedResidualNetwork(
             input_dim * num_inputs, hidden_dim, num_inputs, dropout
         )
@@ -96,10 +98,13 @@ class VariableSelectionNetwork(nn.Module):
         flat = x.reshape(x.size(0), x.size(1), -1)
         weights = F.softmax(self.variable_selector(flat), dim=-1)
 
-        processed = torch.stack([
-            grn(x[..., i : i + 1].expand(-1, -1, x.size(-1)))
-            for i, grn in enumerate(self.single_variable_grns)
-        ], dim=-1)
+        processed = torch.stack(
+            [
+                grn(x[..., i : i + 1].expand(-1, -1, x.size(-1)))
+                for i, grn in enumerate(self.single_variable_grns)
+            ],
+            dim=-1,
+        )
 
         out = (processed * weights.unsqueeze(-2)).sum(-1)
         return out, weights
@@ -158,10 +163,9 @@ class TemporalFusionTransformer(nn.Module):
         self.config = config
         hidden = config.hidden_size
 
-        self.cat_embeddings = nn.ModuleList([
-            nn.Embedding(vocab_size, hidden)
-            for vocab_size in config.categorical_vocab_sizes
-        ])
+        self.cat_embeddings = nn.ModuleList(
+            [nn.Embedding(vocab_size, hidden) for vocab_size in config.categorical_vocab_sizes]
+        )
 
         self.numeric_proj = nn.Linear(config.num_numeric_features, hidden)
 
@@ -189,21 +193,14 @@ class TemporalFusionTransformer(nn.Module):
         self.attn_norm = nn.LayerNorm(hidden)
         self.pos_grn = GatedResidualNetwork(hidden, hidden * 2, hidden, config.dropout)
 
-        self.output_heads = nn.ModuleList([
-            nn.Linear(hidden, 1) for _ in config.quantiles
-        ])
+        self.output_heads = nn.ModuleList([nn.Linear(hidden, 1) for _ in config.quantiles])
 
     def _embed_inputs(self, numeric: torch.Tensor, categorical: torch.Tensor) -> torch.Tensor:
         """Embed and concatenate all input features."""
         num_emb = self.numeric_proj(numeric)
-        cat_embs = [
-            emb(categorical[..., i])
-            for i, emb in enumerate(self.cat_embeddings)
-        ]
+        cat_embs = [emb(categorical[..., i]) for i, emb in enumerate(self.cat_embeddings)]
         all_features = torch.stack([num_emb] + cat_embs, dim=-1)
-        return all_features.permute(0, 1, 3, 2).reshape(
-            *all_features.shape[:2], -1
-        )
+        return all_features.permute(0, 1, 3, 2).reshape(*all_features.shape[:2], -1)
 
     def forward(
         self,
@@ -235,9 +232,7 @@ class TemporalFusionTransformer(nn.Module):
         dec_attn = attn_out[:, t_enc:, :]
         dec_final = self.pos_grn(dec_attn)
 
-        quantile_preds = torch.cat(
-            [head(dec_final) for head in self.output_heads], dim=-1
-        )
+        quantile_preds = torch.cat([head(dec_final) for head in self.output_heads], dim=-1)
 
         return {
             "quantile_forecasts": quantile_preds,

@@ -82,13 +82,15 @@ def run_deepeval_suite(n_samples: int | None = None) -> dict[str, Any]:
         try:
             result = chain.invoke_with_sources(sample.question)
             retrieved_context = [s["text"] for s in result["sources"]]
-            test_cases.append(LLMTestCase(
-                input=sample.question,
-                actual_output=result["answer"],
-                expected_output=sample.expected_answer,
-                retrieval_context=retrieved_context,
-                context=retrieved_context,
-            ))
+            test_cases.append(
+                LLMTestCase(
+                    input=sample.question,
+                    actual_output=result["answer"],
+                    expected_output=sample.expected_answer,
+                    retrieval_context=retrieved_context,
+                    context=retrieved_context,
+                )
+            )
         except Exception as e:  # noqa: BLE001
             logger.warning("Failed to generate answer for eval sample", error=str(e))
 
@@ -137,9 +139,7 @@ def run_ragas_eval(n_samples: int | None = None) -> dict[str, Any]:
     chain = GridRAGChain()
     samples = EVAL_DATASET[:n_samples] if n_samples else EVAL_DATASET
 
-    rows: dict[str, list[Any]] = {
-        "question": [], "answer": [], "contexts": [], "ground_truth": []
-    }
+    rows: dict[str, list[Any]] = {"question": [], "answer": [], "contexts": [], "ground_truth": []}
     for sample in samples:
         try:
             result = chain.invoke_with_sources(sample.question)
@@ -176,23 +176,26 @@ def run_and_log_evaluation() -> None:
         ragas_scores = run_ragas_eval()
 
         if deepeval_scores.get("status") == "ok":
-            mlflow.log_metrics({
-                "deepeval_relevancy": deepeval_scores["answer_relevancy"],
-                "deepeval_faithfulness": deepeval_scores["faithfulness"],
-                "deepeval_hallucination": deepeval_scores["hallucination_rate"],
-            })
+            mlflow.log_metrics(
+                {
+                    "deepeval_relevancy": deepeval_scores["answer_relevancy"],
+                    "deepeval_faithfulness": deepeval_scores["faithfulness"],
+                    "deepeval_hallucination": deepeval_scores["hallucination_rate"],
+                }
+            )
 
         if ragas_scores.get("status") == "ok":
-            mlflow.log_metrics({
-                "ragas_faithfulness": ragas_scores["faithfulness"],
-                "ragas_relevancy": ragas_scores["answer_relevancy"],
-                "ragas_context_precision": ragas_scores["context_precision"],
-            })
+            mlflow.log_metrics(
+                {
+                    "ragas_faithfulness": ragas_scores["faithfulness"],
+                    "ragas_relevancy": ragas_scores["answer_relevancy"],
+                    "ragas_context_precision": ragas_scores["context_precision"],
+                }
+            )
 
         import tempfile
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as tmp:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
             json.dump({"deepeval": deepeval_scores, "ragas": ragas_scores}, tmp, indent=2)
             mlflow.log_artifact(tmp.name)
         logger.info("Evaluation results logged to MLflow")
