@@ -33,8 +33,8 @@ from typing import Annotated, Any, TypedDict
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
-from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
+from langgraph.graph.state import CompiledStateGraph
 
 from core.config import settings
 from core.logging import get_logger
@@ -44,15 +44,13 @@ logger = get_logger(__name__)
 
 # ── Shared state ──────────────────────────────────────────────────────────────
 
-
 class AgentState(TypedDict):
     """Shared state passed between all agents in the graph."""
-
     messages: Annotated[list[Any], add_messages]
 
     # Query metadata
     query: str
-    query_type: str  # "forecast" | "anomaly" | "qa" | "general"
+    query_type: str          # "forecast" | "anomaly" | "qa" | "general"
     country: str
 
     # Agent outputs
@@ -68,7 +66,6 @@ class AgentState(TypedDict):
 
 # ── LLM client ───────────────────────────────────────────────────────────────
 
-
 def _get_llm() -> ChatAnthropic:
     return ChatAnthropic(
         model=settings.llm_model,
@@ -80,15 +77,13 @@ def _get_llm() -> ChatAnthropic:
 
 # ── Agent nodes ───────────────────────────────────────────────────────────────
 
-
 def router_agent(state: AgentState) -> AgentState:
     """
     Classify the operator's query and set query_type.
     Uses LLM for classification — no hardcoded rules.
     """
     llm = _get_llm()
-    system = SystemMessage(
-        content="""You are a routing agent for a grid analytics platform.
+    system = SystemMessage(content="""You are a routing agent for a grid analytics platform.
 Classify the user query into exactly ONE of: forecast, anomaly, qa, general.
 - forecast: asking for demand predictions, load forecasts, generation outlook
 - anomaly: asking about outages, faults, deviations, unusual behaviour
@@ -98,8 +93,7 @@ Classify the user query into exactly ONE of: forecast, anomaly, qa, general.
 Also extract the country code if mentioned (DE, FR, ES, NL, PL). Default: DE.
 
 Respond ONLY with JSON: {"type": "...", "country": "..."}
-"""
-    )
+""")
     response = llm.invoke([system, HumanMessage(content=state["query"])])
 
     try:
@@ -231,7 +225,6 @@ def qa_agent(state: AgentState) -> AgentState:
     """Retrieve from vector store and generate grounded answer."""
     try:
         from rag.pipeline import GridRAGChain
-
         chain = GridRAGChain()
         answer_dict = chain.invoke_with_sources(state["query"])
         result = {
@@ -242,15 +235,13 @@ def qa_agent(state: AgentState) -> AgentState:
     except Exception as e:
         # Fall back to LLM-only if Qdrant is not running
         llm = _get_llm()
-        response = llm.invoke(
-            [
-                SystemMessage(
-                    content="You are a grid operations assistant. "
-                    "Answer based on general knowledge."
-                ),
-                HumanMessage(content=state["query"]),
-            ]
-        )
+        response = llm.invoke([
+            SystemMessage(
+                content="You are a grid operations assistant. "
+                "Answer based on general knowledge."
+            ),
+            HumanMessage(content=state["query"]),
+        ])
         result = {
             "status": "fallback",
             "answer": response.content,
@@ -289,12 +280,10 @@ def synthesiser(state: AgentState) -> AgentState:
         if qa.get("status") in ("ok", "fallback"):
             context_parts.append(f"Historical context: {qa['answer'][:800]}")
 
-    system = SystemMessage(
-        content="""You are Voltiq, an expert grid analytics assistant.
+    system = SystemMessage(content="""You are Voltiq, an expert grid analytics assistant.
 Synthesise the analysis results into a clear, professional briefing for a grid operator.
 Use bullet points for key findings. Highlight any high-severity issues prominently.
-Be concise — operators are busy. Max 300 words."""
-    )
+Be concise — operators are busy. Max 300 words.""")
 
     human = HumanMessage(content="\n\n".join(context_parts))
     response = llm.invoke([system, human])
@@ -303,7 +292,6 @@ Be concise — operators are busy. Max 300 words."""
 
 
 # ── Routing edges ─────────────────────────────────────────────────────────────
-
 
 def route_after_router(state: AgentState) -> str:
     return state.get("query_type", "general")
@@ -323,8 +311,7 @@ def should_run_qa(state: AgentState) -> str:
 
 # ── Build graph ───────────────────────────────────────────────────────────────
 
-
-def build_graph() -> CompiledGraph:
+def build_graph() -> CompiledStateGraph:
     """Compile and return the Voltiq LangGraph agent graph."""
     graph = StateGraph(AgentState)
 
