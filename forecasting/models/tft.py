@@ -22,32 +22,28 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as F  # noqa: N812
 
 
 @dataclass
 class TFTConfig:
-    # Input dimensions
-    num_numeric_features: int = 7    # load, temp, wind, radiation + 3 time features
-    num_categorical_features: int = 2  # country_id, is_weekend
-    categorical_vocab_sizes: list[int] = None  # populated at runtime
+    num_numeric_features: int = 7
+    num_categorical_features: int = 2
+    categorical_vocab_sizes: list[int] | None = None
 
-    # Architecture
     hidden_size: int = 64
     lstm_layers: int = 2
     attention_heads: int = 4
     dropout: float = 0.1
 
-    # Sequence lengths
-    encoder_length: int = 168    # 7 days of history
-    decoder_length: int = 48     # 48h forecast horizon
+    encoder_length: int = 168
+    decoder_length: int = 48
 
-    # Output
-    quantiles: list[float] = None
+    quantiles: list[float] | None = None
 
     def __post_init__(self) -> None:
         if self.categorical_vocab_sizes is None:
-            self.categorical_vocab_sizes = [6, 2]  # 5 countries + unknown, is_weekend
+            self.categorical_vocab_sizes = [6, 2]
         if self.quantiles is None:
             self.quantiles = [0.1, 0.5, 0.9]
 
@@ -55,7 +51,9 @@ class TFTConfig:
 class GatedResidualNetwork(nn.Module):
     """GRN: core building block of TFT. Applies gating to skip trivial transformations."""
 
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, dropout: float = 0.1):
+    def __init__(
+        self, input_dim: int, hidden_dim: int, output_dim: int, dropout: float = 0.1
+    ) -> None:
         super().__init__()
         self.fc1 = nn.Linear(input_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, output_dim)
@@ -77,7 +75,9 @@ class GatedResidualNetwork(nn.Module):
 class VariableSelectionNetwork(nn.Module):
     """VSN: learns which input variables matter most at each time step."""
 
-    def __init__(self, input_dim: int, num_inputs: int, hidden_dim: int, dropout: float = 0.1):
+    def __init__(
+        self, input_dim: int, num_inputs: int, hidden_dim: int, dropout: float = 0.1
+    ) -> None:
         super().__init__()
         self.num_inputs = num_inputs
         self.single_variable_grns = nn.ModuleList([
@@ -101,7 +101,6 @@ class VariableSelectionNetwork(nn.Module):
             for i, grn in enumerate(self.single_variable_grns)
         ], dim=-1)
 
-        # Weighted sum across variables
         out = (processed * weights.unsqueeze(-2)).sum(-1)
         return out, weights
 
@@ -109,7 +108,7 @@ class VariableSelectionNetwork(nn.Module):
 class TemporalSelfAttention(nn.Module):
     """Interpretable multi-head attention — single head per query for interpretability."""
 
-    def __init__(self, hidden_dim: int, num_heads: int, dropout: float = 0.1):
+    def __init__(self, hidden_dim: int, num_heads: int, dropout: float = 0.1) -> None:
         super().__init__()
         assert hidden_dim % num_heads == 0
         self.num_heads = num_heads
@@ -122,22 +121,26 @@ class TemporalSelfAttention(nn.Module):
         self.out_proj = nn.Linear(hidden_dim, hidden_dim)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
-        B, T, D = x.shape
-        H, Dh = self.num_heads, self.head_dim
+    def forward(
+        self,
+        x: torch.Tensor,
+        mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        batch, seq, dim = x.shape
+        n_heads, head_d = self.num_heads, self.head_dim
 
-        Q = self.q_proj(x).view(B, T, H, Dh).transpose(1, 2)
-        K = self.k_proj(x).view(B, T, H, Dh).transpose(1, 2)
-        V = self.v_proj(x).view(B, T, H, Dh).transpose(1, 2)
+        q = self.q_proj(x).view(batch, seq, n_heads, head_d).transpose(1, 2)
+        k = self.k_proj(x).view(batch, seq, n_heads, head_d).transpose(1, 2)
+        v = self.v_proj(x).view(batch, seq, n_heads, head_d).transpose(1, 2)
 
-        scores = torch.matmul(Q, K.transpose(-2, -1)) / self.scale
+        scores = torch.matmul(q, k.transpose(-2, -1)) / self.scale
 
         if mask is not None:
             scores = scores.masked_fill(mask.unsqueeze(0).unsqueeze(0), float("-inf"))
 
         attn = self.dropout(F.softmax(scores, dim=-1))
-        out = torch.matmul(attn, V).transpose(1, 2).reshape(B, T, D)
-        return self.out_proj(out), attn.mean(dim=1)  # avg attention across heads
+        out = torch.matmul(attn, v).transpose(1, 2).reshape(batch, seq, dim)
+        return self.out_proj(out), attn.mean(dim=1)
 
 
 class TemporalFusionTransformer(nn.Module):
@@ -150,72 +153,64 @@ class TemporalFusionTransformer(nn.Module):
       - variable_weights:   (batch, seq_len, num_inputs) — feature importance
     """
 
-    def __init__(self, config: TFTConfig):
+    def __init__(self, config: TFTConfig) -> None:
         super().__init__()
         self.config = config
-        H = config.hidden_size
+        hidden = config.hidden_size
 
-        # Embeddings for categorical features
         self.cat_embeddings = nn.ModuleList([
-            nn.Embedding(vocab_size, H)
+            nn.Embedding(vocab_size, hidden)
             for vocab_size in config.categorical_vocab_sizes
         ])
 
-        # Project numeric features to hidden size
-        self.numeric_proj = nn.Linear(config.num_numeric_features, H)
+        self.numeric_proj = nn.Linear(config.num_numeric_features, hidden)
 
         total_features = config.num_numeric_features + config.num_categorical_features
 
-        # Variable selection
-        self.encoder_vsn = VariableSelectionNetwork(H, total_features, H, config.dropout)
-        self.decoder_vsn = VariableSelectionNetwork(H, total_features, H, config.dropout)
+        self.encoder_vsn = VariableSelectionNetwork(hidden, total_features, hidden, config.dropout)
+        self.decoder_vsn = VariableSelectionNetwork(hidden, total_features, hidden, config.dropout)
 
-        # LSTM encoder-decoder
         self.encoder_lstm = nn.LSTM(
-            input_size=H,
-            hidden_size=H,
+            input_size=hidden,
+            hidden_size=hidden,
             num_layers=config.lstm_layers,
             dropout=config.dropout if config.lstm_layers > 1 else 0.0,
             batch_first=True,
         )
         self.decoder_lstm = nn.LSTM(
-            input_size=H,
-            hidden_size=H,
+            input_size=hidden,
+            hidden_size=hidden,
             num_layers=config.lstm_layers,
             dropout=config.dropout if config.lstm_layers > 1 else 0.0,
             batch_first=True,
         )
 
-        # Temporal self-attention
-        self.attention = TemporalSelfAttention(H, config.attention_heads, config.dropout)
-        self.attn_norm = nn.LayerNorm(H)
+        self.attention = TemporalSelfAttention(hidden, config.attention_heads, config.dropout)
+        self.attn_norm = nn.LayerNorm(hidden)
+        self.pos_grn = GatedResidualNetwork(hidden, hidden * 2, hidden, config.dropout)
 
-        # Position-wise feed-forward (GRN)
-        self.pos_grn = GatedResidualNetwork(H, H * 2, H, config.dropout)
-
-        # Output projection — one per quantile
         self.output_heads = nn.ModuleList([
-            nn.Linear(H, 1) for _ in config.quantiles
+            nn.Linear(hidden, 1) for _ in config.quantiles
         ])
 
     def _embed_inputs(self, numeric: torch.Tensor, categorical: torch.Tensor) -> torch.Tensor:
         """Embed and concatenate all input features."""
-        num_emb = self.numeric_proj(numeric)                 # (B, T, H)
+        num_emb = self.numeric_proj(numeric)
         cat_embs = [
             emb(categorical[..., i])
             for i, emb in enumerate(self.cat_embeddings)
         ]
-        all_features = torch.stack([num_emb] + cat_embs, dim=-1)  # (B, T, H, F)
+        all_features = torch.stack([num_emb] + cat_embs, dim=-1)
         return all_features.permute(0, 1, 3, 2).reshape(
             *all_features.shape[:2], -1
-        )  # (B, T, F*H)
+        )
 
     def forward(
         self,
-        enc_numeric: torch.Tensor,       # (B, encoder_len, num_numeric)
-        enc_categorical: torch.Tensor,   # (B, encoder_len, num_categorical)
-        dec_numeric: torch.Tensor,       # (B, decoder_len, num_numeric) — known future covariates
-        dec_categorical: torch.Tensor,   # (B, decoder_len, num_categorical)
+        enc_numeric: torch.Tensor,
+        enc_categorical: torch.Tensor,
+        dec_numeric: torch.Tensor,
+        dec_categorical: torch.Tensor,
     ) -> dict[str, torch.Tensor]:
 
         enc_in = self._embed_inputs(enc_numeric, enc_categorical)
@@ -224,33 +219,29 @@ class TemporalFusionTransformer(nn.Module):
         enc_selected, enc_var_wt = self.encoder_vsn(enc_in)
         dec_selected, dec_var_wt = self.decoder_vsn(dec_in)
 
-        enc_out, hidden = self.encoder_lstm(enc_selected)
-        dec_out, _ = self.decoder_lstm(dec_selected, hidden)
+        enc_out, hidden_state = self.encoder_lstm(enc_selected)
+        dec_out, _ = self.decoder_lstm(dec_selected, hidden_state)
 
-        # Concatenate for temporal attention over full context
         full_seq = torch.cat([enc_out, dec_out], dim=1)
-        T_enc = enc_out.size(1)
-        T_dec = dec_out.size(1)
-        T_total = T_enc + T_dec
+        t_enc = enc_out.size(1)
+        t_total = full_seq.size(1)
 
-        # Causal mask: decoder positions can only attend to encoder + past decoder
-        mask = torch.triu(torch.ones(T_total, T_total, dtype=torch.bool), diagonal=1)
+        mask = torch.triu(torch.ones(t_total, t_total, dtype=torch.bool), diagonal=1)
         mask = mask.to(enc_out.device)
 
         attn_out, attn_weights = self.attention(full_seq, mask)
         attn_out = self.attn_norm(attn_out + full_seq)
 
-        # Take only decoder slice, apply GRN
-        dec_attn = attn_out[:, T_enc:, :]
+        dec_attn = attn_out[:, t_enc:, :]
         dec_final = self.pos_grn(dec_attn)
 
         quantile_preds = torch.cat(
             [head(dec_final) for head in self.output_heads], dim=-1
-        )  # (B, decoder_len, num_quantiles)
+        )
 
         return {
             "quantile_forecasts": quantile_preds,
-            "attention_weights": attn_weights[:, T_enc:, :T_enc],
+            "attention_weights": attn_weights[:, t_enc:, :t_enc],
             "encoder_variable_weights": enc_var_wt,
             "decoder_variable_weights": dec_var_wt,
         }

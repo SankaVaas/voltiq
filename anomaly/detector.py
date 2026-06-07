@@ -14,14 +14,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as F  # noqa: N812
 from torch.utils.data import DataLoader, Dataset
 
-from core.config import settings
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 class TimeSeriesWindowDataset(Dataset):
     """Sliding window dataset over a 1D time series."""
 
-    def __init__(self, series: np.ndarray, window_size: int = 24):
+    def __init__(self, series: np.ndarray, window_size: int = 24) -> None:
         self.windows = [
             torch.tensor(series[i : i + window_size], dtype=torch.float32).unsqueeze(-1)
             for i in range(len(series) - window_size + 1)
@@ -44,7 +44,9 @@ class TimeSeriesWindowDataset(Dataset):
 
 
 class LSTMEncoder(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int, num_layers: int, latent_dim: int):
+    def __init__(
+        self, input_size: int, hidden_size: int, num_layers: int, latent_dim: int
+    ) -> None:
         super().__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_size, latent_dim)
@@ -57,9 +59,13 @@ class LSTMEncoder(nn.Module):
 
 class LSTMDecoder(nn.Module):
     def __init__(
-        self, latent_dim: int, hidden_size: int, num_layers: int,
-        output_size: int, seq_len: int
-    ):
+        self,
+        latent_dim: int,
+        hidden_size: int,
+        num_layers: int,
+        output_size: int,
+        seq_len: int,
+    ) -> None:
         super().__init__()
         self.seq_len = seq_len
         self.fc = nn.Linear(latent_dim, hidden_size)
@@ -85,7 +91,7 @@ class LSTMAutoencoder(nn.Module):
         hidden_size: int = 64,
         latent_dim: int = 16,
         num_layers: int = 2,
-    ):
+    ) -> None:
         super().__init__()
         self.window_size = window_size
         self.encoder = LSTMEncoder(input_size, hidden_size, num_layers, latent_dim)
@@ -113,7 +119,7 @@ class AnomalyDetector:
         window_size: int = 24,
         threshold_percentile: float = 95.0,
         model_path: Path | None = None,
-    ):
+    ) -> None:
         self.window_size = window_size
         self.threshold_percentile = threshold_percentile
         self.threshold: float | None = None
@@ -156,14 +162,13 @@ class AnomalyDetector:
             if (epoch + 1) % 5 == 0:
                 logger.info("Anomaly training", epoch=epoch + 1, loss=round(avg, 6))
 
-        # Calibrate threshold on training data
         self._calibrate_threshold(normal_series)
         return losses
 
     def _calibrate_threshold(self, series: np.ndarray) -> None:
         dataset = TimeSeriesWindowDataset(series, self.window_size)
         loader = DataLoader(dataset, batch_size=256)
-        errors = []
+        errors: list[float] = []
         self.model.eval()
         with torch.no_grad():
             for batch in loader:
@@ -177,7 +182,7 @@ class AnomalyDetector:
             percentile=self.threshold_percentile,
         )
 
-    def detect(self, series: np.ndarray) -> dict:
+    def detect(self, series: np.ndarray) -> dict[str, Any]:
         """
         Run anomaly detection over an arbitrary-length series.
         Returns: {anomaly_indices, reconstruction_errors, threshold}
@@ -187,7 +192,7 @@ class AnomalyDetector:
 
         dataset = TimeSeriesWindowDataset(series, self.window_size)
         loader = DataLoader(dataset, batch_size=256)
-        errors = []
+        errors: list[float] = []
         self.model.eval()
         with torch.no_grad():
             for batch in loader:

@@ -11,10 +11,7 @@ CPU-friendly: no GPU required.
 
 from __future__ import annotations
 
-import hashlib
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Optional
+from datetime import UTC, datetime
 
 import openmeteo_requests
 import pandas as pd
@@ -34,11 +31,11 @@ RAW_DIR.mkdir(parents=True, exist_ok=True)
 # ── ENTSO-E ──────────────────────────────────────────────────────────────────
 
 COUNTRY_CODES = {
-    "DE": "10Y1001A1001A83F",   # Germany
-    "FR": "10YFR-RTE------C",   # France
-    "ES": "10YES-REE------0",   # Spain
-    "NL": "10YNL----------L",   # Netherlands
-    "PL": "10YPL-AREA-----S",   # Poland
+    "DE": "10Y1001A1001A83F",
+    "FR": "10YFR-RTE------C",
+    "ES": "10YES-REE------0",
+    "NL": "10YNL----------L",
+    "PL": "10YPL-AREA-----S",
 }
 
 
@@ -58,8 +55,8 @@ def fetch_entso_load(
 
     client = EntsoePandasClient(api_key=settings.entso_e_api_key)
 
-    start = start or datetime(2023, 1, 1, tzinfo=timezone.utc)
-    end = end or datetime(2024, 1, 1, tzinfo=timezone.utc)
+    start = start or datetime(2023, 1, 1, tzinfo=UTC)
+    end = end or datetime(2024, 1, 1, tzinfo=UTC)
 
     country_code = COUNTRY_CODES.get(country, country)
     logger.info("Fetching ENTSO-E load", country=country, start=str(start), end=str(end))
@@ -90,7 +87,7 @@ def _synthetic_load(
     rng = pd.date_range(start=start, end=end, freq="h")
 
     np.random.seed(42)
-    base = 45_000  # MW baseline (Germany-like)
+    base = 45_000
     hours = pd.Series(rng.hour)
     day_pattern = 8_000 * np.sin((hours - 6) * np.pi / 12).clip(0)
     week_pattern = np.where(rng.weekday >= 5, -5_000, 0)
@@ -107,11 +104,11 @@ def _synthetic_load(
 # ── Open-Meteo ───────────────────────────────────────────────────────────────
 
 CITY_COORDS = {
-    "DE": (52.52, 13.41),    # Berlin
-    "FR": (48.86, 2.35),     # Paris
-    "ES": (40.42, -3.70),    # Madrid
-    "NL": (52.37, 4.90),     # Amsterdam
-    "PL": (52.23, 21.01),    # Warsaw
+    "DE": (52.52, 13.41),
+    "FR": (48.86, 2.35),
+    "ES": (40.42, -3.70),
+    "NL": (52.37, 4.90),
+    "PL": (52.23, 21.01),
 }
 
 
@@ -186,13 +183,11 @@ def build_feature_dataset(
     load_df = fetch_entso_load(country=country, start=start, end=end)
     weather_df = fetch_weather(country=country, start=start, end=end)
 
-    # Normalise timestamps to UTC, strip tz for merge
     load_df["timestamp"] = pd.to_datetime(load_df["timestamp"]).dt.tz_localize(None)
     weather_df["timestamp"] = pd.to_datetime(weather_df["timestamp"]).dt.tz_localize(None)
 
     df = pd.merge(load_df, weather_df.drop(columns=["country"]), on="timestamp", how="inner")
 
-    # Temporal features
     df["hour_of_day"] = df["timestamp"].dt.hour
     df["day_of_week"] = df["timestamp"].dt.dayofweek
     df["month"] = df["timestamp"].dt.month

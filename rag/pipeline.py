@@ -23,7 +23,6 @@ from langchain_community.document_loaders import (
     TextLoader,
     UnstructuredMarkdownLoader,
 )
-from langchain_community.vectorstores import Qdrant
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
@@ -41,10 +40,10 @@ logger = get_logger(__name__)
 class FastEmbedWrapper:
     """Thin wrapper so fastembed works with LangChain interfaces."""
 
-    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5"):
+    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5") -> None:
         from fastembed import TextEmbedding
         self._model = TextEmbedding(model_name=model_name)
-        self.dimension = 384  # bge-small output dim
+        self.dimension = 384
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return [emb.tolist() for emb in self._model.embed(texts)]
@@ -66,7 +65,8 @@ def load_documents(source_dir: str | Path) -> list[Document]:
     docs.extend(txt_loader.load())
 
     md_loader = DirectoryLoader(
-        str(source_dir), glob="**/*.md", loader_cls=UnstructuredMarkdownLoader, show_progress=True
+        str(source_dir), glob="**/*.md", loader_cls=UnstructuredMarkdownLoader,
+        show_progress=True,
     )
     docs.extend(md_loader.load())
 
@@ -95,7 +95,7 @@ def chunk_documents(
 class VoltiqVectorStore:
     """Manages Qdrant collections for grid incident data."""
 
-    def __init__(self, collection_name: str | None = None):
+    def __init__(self, collection_name: str | None = None) -> None:
         self.collection_name = collection_name or settings.qdrant_collection_incidents
         self.embedder = FastEmbedWrapper(settings.embedding_model)
         self.client = QdrantClient(
@@ -119,8 +119,9 @@ class VoltiqVectorStore:
 
     def ingest(self, chunks: list[Document]) -> int:
         """Embed chunks and upsert into Qdrant. Returns number ingested."""
-        from qdrant_client.models import PointStruct
         import uuid
+
+        from qdrant_client.models import PointStruct
 
         texts = [c.page_content for c in chunks]
         vectors = self.embedder.embed_documents(texts)
@@ -135,11 +136,15 @@ class VoltiqVectorStore:
                     "chunk_index": i,
                 },
             )
-            for i, (text, vec, chunk) in enumerate(zip(texts, vectors, chunks))
+            for i, (text, vec, chunk) in enumerate(zip(texts, vectors, chunks, strict=False))
         ]
 
         self.client.upsert(collection_name=self.collection_name, points=points)
-        logger.info("Ingested chunks into Qdrant", count=len(points), collection=self.collection_name)
+        logger.info(
+            "Ingested chunks into Qdrant",
+            count=len(points),
+            collection=self.collection_name,
+        )
         return len(points)
 
     def search(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
@@ -185,7 +190,7 @@ class GridRAGChain:
         answer = chain.invoke("What caused the frequency deviation on 2023-07-14?")
     """
 
-    def __init__(self, collection_name: str | None = None, top_k: int = 5):
+    def __init__(self, collection_name: str | None = None, top_k: int = 5) -> None:
         self.vector_store = VoltiqVectorStore(collection_name)
         self.top_k = top_k
         self.llm = ChatAnthropic(
@@ -195,7 +200,7 @@ class GridRAGChain:
         )
         self._chain = self._build_chain()
 
-    def _build_chain(self):
+    def _build_chain(self) -> Any:  # noqa: ANN401
         def retrieve(query: str) -> str:
             results = self.vector_store.search(query, top_k=self.top_k)
             return "\n\n---\n\n".join(
