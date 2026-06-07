@@ -15,7 +15,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from api.middleware.logging import LoggingMiddleware
 from api.middleware.metrics import MetricsMiddleware
-from api.routers import router_agents, router_anomalies, router_forecast, router_health, router_ingest
+from api.routers import agents, anomalies, forecast, health, ingest  # noqa: E501
 from core.config import settings
 from core.logging import get_logger, setup_logging
 
@@ -50,11 +50,11 @@ app.add_middleware(
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(MetricsMiddleware)
 
-app.include_router(router_health.router, tags=["Health"])
-app.include_router(router_agents.router, prefix="/api/v1", tags=["Agent"])
-app.include_router(router_forecast.router, prefix="/api/v1", tags=["Forecast"])
-app.include_router(router_anomalies.router, prefix="/api/v1", tags=["Anomalies"])
-app.include_router(router_ingest.router, prefix="/api/v1", tags=["Ingest"])
+app.include_router(health.router, tags=["Health"])
+app.include_router(agents.router, prefix="/api/v1", tags=["Agent"])
+app.include_router(forecast.router, prefix="/api/v1", tags=["Forecast"])
+app.include_router(anomalies.router, prefix="/api/v1", tags=["Anomalies"])
+app.include_router(ingest.router, prefix="/api/v1", tags=["Ingest"])
 
 
 @app.get("/metrics", include_in_schema=False)
