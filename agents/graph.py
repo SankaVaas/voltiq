@@ -339,3 +339,27 @@ def build_graph() -> Any:
 
 # Module-level compiled graph (singleton)
 voltiq_graph = build_graph()
+
+
+async def run_agent(query: str, country: str = "DE") -> dict[str, Any]:
+    """Entry point for the API layer."""
+    initial_state: AgentState = {
+        "messages": [HumanMessage(content=query)],
+        "query": query,
+        "query_type": "",
+        "country": country,
+        "ingest_result": {},
+        "forecast_result": {},
+        "anomaly_result": {},
+        "qa_result": {},
+        "final_response": "",
+        "error": None,
+    }
+    final_state = await voltiq_graph.ainvoke(initial_state)
+    return {
+        "response": final_state["final_response"],
+        "query_type": final_state["query_type"],
+        "country": final_state["country"],
+        "forecast": final_state.get("forecast_result"),
+        "anomalies": final_state.get("anomaly_result"),
+    }
