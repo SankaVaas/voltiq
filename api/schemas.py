@@ -1,28 +1,27 @@
-"""api/schemas.py — Pydantic v2 request/response schemas for all endpoints."""
+"""api/schemas.py — Pydantic v2 request/response schemas."""
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+VALID_COUNTRIES = {"DE", "FR", "ES", "NL", "PL"}
+
 
 class QueryRequest(BaseModel):
-    query: str = Field(
-        ..., min_length=3, max_length=2000, description="Natural language operator query"
-    )
-    country: str = Field(default="DE", description="ISO country code (DE, FR, ES, NL, PL)")
+    query: str = Field(..., min_length=3, max_length=2000)
+    country: str = Field(default="DE")
     include_forecast: bool = Field(default=True)
     include_anomaly: bool = Field(default=True)
 
     @field_validator("country")
     @classmethod
     def validate_country(cls, v: str) -> str:
-        allowed = {"DE", "FR", "ES", "NL", "PL"}
         upper = v.upper()
-        if upper not in allowed:
-            raise ValueError(f"country must be one of {allowed}")
+        if upper not in VALID_COUNTRIES:
+            raise ValueError(f"country must be one of {VALID_COUNTRIES}")
         return upper
 
 
@@ -39,6 +38,14 @@ class ForecastRequest(BaseModel):
     country: str = Field(default="DE")
     horizon_hours: int = Field(default=48, ge=1, le=168)
 
+    @field_validator("country")
+    @classmethod
+    def validate_country(cls, v: str) -> str:
+        upper = v.upper()
+        if upper not in VALID_COUNTRIES:
+            raise ValueError(f"country must be one of {VALID_COUNTRIES}")
+        return upper
+
 
 class ForecastResponse(BaseModel):
     country: str
@@ -49,7 +56,7 @@ class ForecastResponse(BaseModel):
     p90: list[float]
     peak_forecast_mw: float
     model_version: str
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class AnomalyResponse(BaseModel):
@@ -59,12 +66,20 @@ class AnomalyResponse(BaseModel):
     severity: Literal["low", "medium", "high"]
     threshold: float
     anomaly_indices: list[int]
-    scanned_at: datetime = Field(default_factory=datetime.utcnow)
+    scanned_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class IngestRequest(BaseModel):
     country: str = Field(default="DE")
     days_back: int = Field(default=7, ge=1, le=365)
+
+    @field_validator("country")
+    @classmethod
+    def validate_country(cls, v: str) -> str:
+        upper = v.upper()
+        if upper not in VALID_COUNTRIES:
+            raise ValueError(f"country must be one of {VALID_COUNTRIES}")
+        return upper
 
 
 class IngestResponse(BaseModel):
