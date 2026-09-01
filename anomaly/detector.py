@@ -1,13 +1,8 @@
 """
 anomaly/detector.py — LSTM Autoencoder for smart-meter anomaly detection.
 
-Strategy:
-  Train the autoencoder on normal (non-anomalous) windows.
-  At inference, windows with reconstruction error above the threshold percentile
-  are flagged as anomalies — no labels required (unsupervised).
-
-CPU-friendly: small model, short sequences, fast inference.
-Colab T4 recommended for training on large datasets.
+Unsupervised: train on normal data, flag high reconstruction-error windows.
+CPU-friendly. Colab T4 recommended for large datasets.
 """
 
 from __future__ import annotations
@@ -44,14 +39,18 @@ class TimeSeriesWindowDataset(Dataset):
 
 
 class LSTMEncoder(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int, num_layers: int, latent_dim: int) -> None:
+    def __init__(
+        self, input_size: int, hidden_size: int, num_layers: int, latent_dim: int
+    ) -> None:
         super().__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_size, latent_dim)
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+    def forward(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         out, (h, c) = self.lstm(x)
-        latent = self.fc(out[:, -1, :])  # last time step → latent vector
+        latent = self.fc(out[:, -1, :])
         return latent, (h, c)
 
 
@@ -77,10 +76,7 @@ class LSTMDecoder(nn.Module):
 
 
 class LSTMAutoencoder(nn.Module):
-    """
-    Encode a time-series window into a low-dimensional latent space,
-    then decode back. High reconstruction error → anomaly.
-    """
+    """LSTM Autoencoder — high reconstruction error flags anomalies."""
 
     def __init__(
         self,
@@ -97,20 +93,16 @@ class LSTMAutoencoder(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         latent, _ = self.encoder(x)
-        reconstruction = self.decoder(latent)
-        return reconstruction
+        return self.decoder(latent)
 
     def reconstruction_error(self, x: torch.Tensor) -> torch.Tensor:
-        """Per-sample MSE between input and reconstruction."""
+        """Per-sample MSE — returns CPU float tensor, no numpy needed."""
         recon = self(x)
         return F.mse_loss(recon, x, reduction="none").mean(dim=[1, 2])
 
 
 class AnomalyDetector:
-    """
-    High-level wrapper around LSTMAutoencoder.
-    Handles training, threshold calibration, and inference.
-    """
+    """High-level wrapper: train, calibrate threshold, detect."""
 
     def __init__(
         self,
@@ -122,7 +114,7 @@ class AnomalyDetector:
         self.threshold_percentile = threshold_percentile
         self.threshold: float | None = None
         self.model = LSTMAutoencoder(window_size=window_size)
-        self.device = torch.device("cpu")  # CPU-first
+        self.device = torch.device("cpu")
 
         if model_path and model_path.exists():
             self.load(model_path)
@@ -134,10 +126,9 @@ class AnomalyDetector:
         batch_size: int = 64,
         lr: float = 1e-3,
     ) -> list[float]:
-        """Train on normal (non-anomalous) data. Returns per-epoch loss."""
+        """Train on normal data. Returns per-epoch losses."""
         dataset = TimeSeriesWindowDataset(normal_series, self.window_size)
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
         self.model.to(self.device).train()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
@@ -151,7 +142,7 @@ class AnomalyDetector:
                 recon = self.model(batch)
                 loss = F.mse_loss(recon, batch)
                 loss.backward()
-                nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
                 optimizer.step()
                 epoch_loss += loss.item()
             avg = epoch_loss / len(loader)
@@ -170,9 +161,9 @@ class AnomalyDetector:
         self.model.eval()
         with torch.no_grad():
             for batch in loader:
-                batch = batch.to(self.device)
-                err = self.model.reconstruction_error(batch)
-                errors.extend(err.cpu().numpy().tolist())
+                err = self.model.reconstruction_error(batch.to(self.device))
+                # Use .tolist() directly — avoids numpy/torch ABI incompatibility
+                errors.extend(err.tolist())
         self.threshold = float(np.percentile(errors, self.threshold_percentile))
         logger.info(
             "Anomaly threshold calibrated",
@@ -181,12 +172,9 @@ class AnomalyDetector:
         )
 
     def detect(self, series: np.ndarray) -> dict[str, Any]:
-        """
-        Run anomaly detection over an arbitrary-length series.
-        Returns: {anomaly_indices, reconstruction_errors, threshold}
-        """
+        """Detect anomalies. Returns indices, errors, threshold, rate."""
         if self.threshold is None:
-            raise RuntimeError("Model not calibrated. Call train() first or load a saved model.")
+            raise RuntimeError("Call train() first or load a saved model.")
 
         dataset = TimeSeriesWindowDataset(series, self.window_size)
         loader = DataLoader(dataset, batch_size=256)
@@ -194,12 +182,11 @@ class AnomalyDetector:
         self.model.eval()
         with torch.no_grad():
             for batch in loader:
-                batch = batch.to(self.device)
-                err = self.model.reconstruction_error(batch)
-                errors.extend(err.cpu().numpy().tolist())
+                err = self.model.reconstruction_error(batch.to(self.device))
+                errors.extend(err.tolist())
 
         errors_arr = np.array(errors)
-        anomaly_indices = np.where(errors_arr > self.threshold)[0].tolist()
+        anomaly_indices = [int(i) for i in np.where(errors_arr > self.threshold)[0]]
         return {
             "anomaly_indices": anomaly_indices,
             "reconstruction_errors": errors_arr.tolist(),
@@ -210,23 +197,18 @@ class AnomalyDetector:
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(self.model.state_dict(), path)
-        meta_path = path.with_suffix(".meta.json")
-        meta_path.write_text(
-            json.dumps(
-                {
-                    "window_size": self.window_size,
-                    "threshold": self.threshold,
-                    "threshold_percentile": self.threshold_percentile,
-                }
-            )
-        )
+        path.with_suffix(".meta.json").write_text(json.dumps({
+            "window_size": self.window_size,
+            "threshold": self.threshold,
+            "threshold_percentile": self.threshold_percentile,
+        }))
         logger.info("Anomaly model saved", path=str(path))
 
     def load(self, path: Path) -> None:
         self.model.load_state_dict(torch.load(path, map_location=self.device))
-        meta_path = path.with_suffix(".meta.json")
-        if meta_path.exists():
-            meta = json.loads(meta_path.read_text())
-            self.threshold = meta.get("threshold")
-            self.window_size = meta.get("window_size", self.window_size)
+        meta = path.with_suffix(".meta.json")
+        if meta.exists():
+            data = json.loads(meta.read_text())
+            self.threshold = data.get("threshold")
+            self.window_size = data.get("window_size", self.window_size)
         logger.info("Anomaly model loaded", path=str(path), threshold=self.threshold)
