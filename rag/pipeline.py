@@ -37,11 +37,13 @@ logger = get_logger(__name__)
 
 # ── Embeddings (CPU-friendly via fastembed) ───────────────────────────────────
 
+
 class FastEmbedWrapper:
     """Thin wrapper so fastembed works with LangChain interfaces."""
 
     def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5") -> None:
         from fastembed import TextEmbedding
+
         self._model = TextEmbedding(model_name=model_name)
         self.dimension = 384
 
@@ -54,6 +56,7 @@ class FastEmbedWrapper:
 
 # ── Document loading ──────────────────────────────────────────────────────────
 
+
 def load_documents(source_dir: str | Path) -> list[Document]:
     """Load .txt and .md files from a directory."""
     source_dir = Path(source_dir)
@@ -65,7 +68,9 @@ def load_documents(source_dir: str | Path) -> list[Document]:
     docs.extend(txt_loader.load())
 
     md_loader = DirectoryLoader(
-        str(source_dir), glob="**/*.md", loader_cls=UnstructuredMarkdownLoader,
+        str(source_dir),
+        glob="**/*.md",
+        loader_cls=UnstructuredMarkdownLoader,
         show_progress=True,
     )
     docs.extend(md_loader.load())
@@ -91,6 +96,7 @@ def chunk_documents(
 
 
 # ── Qdrant vector store ───────────────────────────────────────────────────────
+
 
 class VoltiqVectorStore:
     """Manages Qdrant collections for grid incident data."""
@@ -168,17 +174,22 @@ class VoltiqVectorStore:
 
 # ── RAG chain ─────────────────────────────────────────────────────────────────
 
-RAG_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are Voltiq's grid operations assistant.
+RAG_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """You are Voltiq's grid operations assistant.
 Answer the operator's question using ONLY the provided context from incident reports and grid data.
 Be precise and technical. If the context does not contain enough information, say so explicitly.
 Never fabricate grid statistics or incident details.
 
 Context:
 {context}
-"""),
-    ("human", "{question}"),
-])
+""",
+        ),
+        ("human", "{question}"),
+    ]
+)
 
 
 class GridRAGChain:
@@ -203,9 +214,7 @@ class GridRAGChain:
     def _build_chain(self) -> Any:  # noqa: ANN401
         def retrieve(query: str) -> str:
             results = self.vector_store.search(query, top_k=self.top_k)
-            return "\n\n---\n\n".join(
-                f"[Source: {r['source']}]\n{r['text']}" for r in results
-            )
+            return "\n\n---\n\n".join(f"[Source: {r['source']}]\n{r['text']}" for r in results)
 
         return (
             {"context": retrieve, "question": RunnablePassthrough()}
@@ -221,15 +230,14 @@ class GridRAGChain:
     def invoke_with_sources(self, question: str) -> dict[str, Any]:
         """Return both the answer and the retrieved source chunks."""
         sources = self.vector_store.search(question, top_k=self.top_k)
-        context = "\n\n---\n\n".join(
-            f"[Source: {r['source']}]\n{r['text']}" for r in sources
-        )
+        context = "\n\n---\n\n".join(f"[Source: {r['source']}]\n{r['text']}" for r in sources)
         prompt = RAG_PROMPT.format_messages(context=context, question=question)
         answer = (self.llm | StrOutputParser()).invoke(prompt)
         return {"answer": answer, "sources": sources}
 
 
 # ── Ingestion helper ──────────────────────────────────────────────────────────
+
 
 def ingest_incident_reports(source_dir: str | Path) -> int:
     """One-shot: load → chunk → embed → store. Returns total chunks ingested."""

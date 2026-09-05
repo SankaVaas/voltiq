@@ -138,13 +138,15 @@ def fetch_weather(
         freq=pd.Timedelta(seconds=hourly.Interval()),
         inclusive="left",
     )
-    df = pd.DataFrame({
-        "timestamp": timestamps,
-        "temperature_2m": hourly.Variables(0).ValuesAsNumpy(),
-        "wind_speed_10m": hourly.Variables(1).ValuesAsNumpy(),
-        "shortwave_radiation": hourly.Variables(2).ValuesAsNumpy(),
-        "country": country,
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "temperature_2m": hourly.Variables(0).ValuesAsNumpy(),
+            "wind_speed_10m": hourly.Variables(1).ValuesAsNumpy(),
+            "shortwave_radiation": hourly.Variables(2).ValuesAsNumpy(),
+            "country": country,
+        }
+    )
     out_path = RAW_DIR / f"weather_{country}.parquet"
     df.to_parquet(out_path, index=False)
     logger.info("Saved weather data", rows=len(df))
@@ -161,13 +163,15 @@ def _synthetic_weather(
     end = end or datetime(2024, 1, 1)
     rng = pd.date_range(start=start, end=end, freq="h")
     np.random.seed(7)
-    return pd.DataFrame({
-        "timestamp": rng,
-        "temperature_2m": np.random.normal(12, 8, len(rng)),
-        "wind_speed_10m": np.abs(np.random.normal(5, 3, len(rng))),
-        "shortwave_radiation": np.abs(np.random.normal(100, 80, len(rng))),
-        "country": country,
-    })
+    return pd.DataFrame(
+        {
+            "timestamp": rng,
+            "temperature_2m": np.random.normal(12, 8, len(rng)),
+            "wind_speed_10m": np.abs(np.random.normal(5, 3, len(rng))),
+            "shortwave_radiation": np.abs(np.random.normal(100, 80, len(rng))),
+            "country": country,
+        }
+    )
 
 
 def build_feature_dataset(

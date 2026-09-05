@@ -1,4 +1,5 @@
 """api/routers/agents.py — agentic query endpoint."""
+
 from __future__ import annotations
 
 import time

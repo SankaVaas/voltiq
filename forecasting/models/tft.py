@@ -55,17 +55,17 @@ class GatedResidualNetwork(nn.Module):
 class VariableSelectionNetwork(nn.Module):
     """VSN: learns which input variables matter most at each time step."""
 
-    def __init__(
-        self, hidden_dim: int, num_inputs: int, dropout: float = 0.1
-    ) -> None:
+    def __init__(self, hidden_dim: int, num_inputs: int, dropout: float = 0.1) -> None:
         super().__init__()
         self.num_inputs = num_inputs
         self.hidden_dim = hidden_dim
         # Each variable gets its own GRN(hidden_dim -> hidden_dim)
-        self.var_grns = nn.ModuleList([
-            GatedResidualNetwork(hidden_dim, hidden_dim, hidden_dim, dropout)
-            for _ in range(num_inputs)
-        ])
+        self.var_grns = nn.ModuleList(
+            [
+                GatedResidualNetwork(hidden_dim, hidden_dim, hidden_dim, dropout)
+                for _ in range(num_inputs)
+            ]
+        )
         # Selector over concatenated variables
         self.selector = GatedResidualNetwork(
             hidden_dim * num_inputs, hidden_dim, num_inputs, dropout
@@ -84,10 +84,13 @@ class VariableSelectionNetwork(nn.Module):
         weights = F.softmax(self.selector(flat), dim=-1)  # (B, T, num_inputs)
 
         # Process each variable independently
-        var_outputs = torch.stack([
-            self.var_grns[i](x[:, :, i, :])  # (B, T, hidden_dim)
-            for i in range(self.num_inputs)
-        ], dim=2)  # (B, T, num_inputs, hidden_dim)
+        var_outputs = torch.stack(
+            [
+                self.var_grns[i](x[:, :, i, :])  # (B, T, hidden_dim)
+                for i in range(self.num_inputs)
+            ],
+            dim=2,
+        )  # (B, T, num_inputs, hidden_dim)
 
         # Weighted sum: (B, T, hidden_dim)
         out = (var_outputs * weights.unsqueeze(-1)).sum(dim=2)
@@ -147,10 +150,9 @@ class TemporalFusionTransformer(nn.Module):
         self.numeric_proj = nn.Linear(1, hidden)
 
         # Categorical embeddings
-        self.cat_embeddings = nn.ModuleList([
-            nn.Embedding(vocab, hidden)
-            for vocab in config.categorical_vocab_sizes
-        ])
+        self.cat_embeddings = nn.ModuleList(
+            [nn.Embedding(vocab, hidden) for vocab in config.categorical_vocab_sizes]
+        )
 
         # Variable selection (operates on (B, T, num_inputs, hidden))
         self.encoder_vsn = VariableSelectionNetwork(hidden, total, config.dropout)
@@ -158,12 +160,16 @@ class TemporalFusionTransformer(nn.Module):
 
         # LSTM encoder-decoder
         self.encoder_lstm = nn.LSTM(
-            hidden, hidden, config.lstm_layers,
+            hidden,
+            hidden,
+            config.lstm_layers,
             dropout=config.dropout if config.lstm_layers > 1 else 0.0,
             batch_first=True,
         )
         self.decoder_lstm = nn.LSTM(
-            hidden, hidden, config.lstm_layers,
+            hidden,
+            hidden,
+            config.lstm_layers,
             dropout=config.dropout if config.lstm_layers > 1 else 0.0,
             batch_first=True,
         )
@@ -172,9 +178,7 @@ class TemporalFusionTransformer(nn.Module):
         self.attn_norm = nn.LayerNorm(hidden)
         self.pos_grn = GatedResidualNetwork(hidden, hidden * 2, hidden, config.dropout)
 
-        self.output_heads = nn.ModuleList([
-            nn.Linear(hidden, 1) for _ in config.quantiles
-        ])
+        self.output_heads = nn.ModuleList([nn.Linear(hidden, 1) for _ in config.quantiles])
 
     def _embed(self, numeric: torch.Tensor, categorical: torch.Tensor) -> torch.Tensor:
         """
@@ -184,12 +188,10 @@ class TemporalFusionTransformer(nn.Module):
         """
         # Each numeric feature → (B, T, hidden) via shared linear on (B, T, 1)
         num_embs = [
-            self.numeric_proj(numeric[:, :, i].unsqueeze(-1))
-            for i in range(numeric.shape[-1])
+            self.numeric_proj(numeric[:, :, i].unsqueeze(-1)) for i in range(numeric.shape[-1])
         ]
         cat_embs = [
-            self.cat_embeddings[i](categorical[:, :, i])
-            for i in range(categorical.shape[-1])
+            self.cat_embeddings[i](categorical[:, :, i]) for i in range(categorical.shape[-1])
         ]
         all_embs = num_embs + cat_embs  # list of (B, T, hidden)
         return torch.stack(all_embs, dim=2)  # (B, T, total, hidden)
@@ -205,8 +207,8 @@ class TemporalFusionTransformer(nn.Module):
         enc_in = self._embed(enc_numeric, enc_categorical)  # (B, T_enc, total, hidden)
         dec_in = self._embed(dec_numeric, dec_categorical)  # (B, T_dec, total, hidden)
 
-        enc_sel, enc_var_wt = self.encoder_vsn(enc_in)   # (B, T_enc, hidden)
-        dec_sel, dec_var_wt = self.decoder_vsn(dec_in)   # (B, T_dec, hidden)
+        enc_sel, enc_var_wt = self.encoder_vsn(enc_in)  # (B, T_enc, hidden)
+        dec_sel, dec_var_wt = self.decoder_vsn(dec_in)  # (B, T_dec, hidden)
 
         enc_out, hidden_state = self.encoder_lstm(enc_sel)
         dec_out, _ = self.decoder_lstm(dec_sel, hidden_state)
@@ -220,9 +222,7 @@ class TemporalFusionTransformer(nn.Module):
         attn_out = self.attn_norm(attn_out + full_seq)
 
         dec_final = self.pos_grn(attn_out[:, t_enc:, :])
-        quantile_preds = torch.cat(
-            [head(dec_final) for head in self.output_heads], dim=-1
-        )
+        quantile_preds = torch.cat([head(dec_final) for head in self.output_heads], dim=-1)
 
         return {
             "quantile_forecasts": quantile_preds,

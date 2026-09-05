@@ -37,7 +37,8 @@ def setup_logging() -> None:
         renderer = structlog.dev.ConsoleRenderer(colors=True)
 
     structlog.configure(
-        processors=shared_processors + [
+        processors=shared_processors
+        + [
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         wrapper_class=structlog.stdlib.BoundLogger,

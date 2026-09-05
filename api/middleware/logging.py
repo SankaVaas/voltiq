@@ -1,4 +1,5 @@
 """api/middleware/logging.py — request/response structured logging."""
+
 from __future__ import annotations
 
 import time

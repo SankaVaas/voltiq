@@ -11,6 +11,7 @@ client = TestClient(app, raise_server_exceptions=False)
 
 # ── Health ────────────────────────────────────────────────────────────────────
 
+
 class TestHealthEndpoint:
     def test_health_returns_200(self) -> None:
         response = client.get("/health")
@@ -25,11 +26,13 @@ class TestHealthEndpoint:
 
     def test_health_version_matches(self) -> None:
         from core.config import settings
+
         data = client.get("/health").json()
         assert data["version"] == settings.app_version
 
 
 # ── Forecast ─────────────────────────────────────────────────────────────────
+
 
 class TestForecastEndpoint:
     def test_forecast_default(self) -> None:
@@ -67,6 +70,7 @@ class TestForecastEndpoint:
 
 # ── Anomaly ───────────────────────────────────────────────────────────────────
 
+
 class TestAnomalyEndpoint:
     def test_anomaly_scan_returns_200(self) -> None:
         response = client.get("/api/v1/anomalies?country=DE")
@@ -87,6 +91,7 @@ class TestAnomalyEndpoint:
 
 
 # ── Ingest ────────────────────────────────────────────────────────────────────
+
 
 class TestIngestEndpoint:
     def test_ingest_returns_status_ok(self) -> None:
@@ -109,6 +114,7 @@ class TestIngestEndpoint:
 
 # ── Metrics ───────────────────────────────────────────────────────────────────
 
+
 class TestMetrics:
     def test_prometheus_metrics_exposed(self) -> None:
         response = client.get("/metrics")
@@ -122,6 +128,7 @@ class TestMetrics:
 
 
 # ── Schemas (via API) ─────────────────────────────────────────────────────────
+
 
 class TestSchemaValidation:
     def test_query_too_short_rejected(self) -> None:

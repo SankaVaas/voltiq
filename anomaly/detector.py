@@ -39,16 +39,12 @@ class TimeSeriesWindowDataset(Dataset):
 
 
 class LSTMEncoder(nn.Module):
-    def __init__(
-        self, input_size: int, hidden_size: int, num_layers: int, latent_dim: int
-    ) -> None:
+    def __init__(self, input_size: int, hidden_size: int, num_layers: int, latent_dim: int) -> None:
         super().__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_size, latent_dim)
 
-    def forward(
-        self, x: torch.Tensor
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         out, (h, c) = self.lstm(x)
         latent = self.fc(out[:, -1, :])
         return latent, (h, c)
@@ -197,11 +193,15 @@ class AnomalyDetector:
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(self.model.state_dict(), path)
-        path.with_suffix(".meta.json").write_text(json.dumps({
-            "window_size": self.window_size,
-            "threshold": self.threshold,
-            "threshold_percentile": self.threshold_percentile,
-        }))
+        path.with_suffix(".meta.json").write_text(
+            json.dumps(
+                {
+                    "window_size": self.window_size,
+                    "threshold": self.threshold,
+                    "threshold_percentile": self.threshold_percentile,
+                }
+            )
+        )
         logger.info("Anomaly model saved", path=str(path))
 
     def load(self, path: Path) -> None:
