@@ -138,15 +138,13 @@ def fetch_weather(
         freq=pd.Timedelta(seconds=hourly.Interval()),
         inclusive="left",
     )
-    df = pd.DataFrame(
-        {
-            "timestamp": timestamps,
-            "temperature_2m": hourly.Variables(0).ValuesAsNumpy(),
-            "wind_speed_10m": hourly.Variables(1).ValuesAsNumpy(),
-            "shortwave_radiation": hourly.Variables(2).ValuesAsNumpy(),
-            "country": country,
-        }
-    )
+    df = pd.DataFrame({
+        "timestamp": timestamps,
+        "temperature_2m": hourly.Variables(0).ValuesAsNumpy(),
+        "wind_speed_10m": hourly.Variables(1).ValuesAsNumpy(),
+        "shortwave_radiation": hourly.Variables(2).ValuesAsNumpy(),
+        "country": country,
+    })
     out_path = RAW_DIR / f"weather_{country}.parquet"
     df.to_parquet(out_path, index=False)
     logger.info("Saved weather data", rows=len(df))
@@ -163,15 +161,13 @@ def _synthetic_weather(
     end = end or datetime(2024, 1, 1)
     rng = pd.date_range(start=start, end=end, freq="h")
     np.random.seed(7)
-    return pd.DataFrame(
-        {
-            "timestamp": rng,
-            "temperature_2m": np.random.normal(12, 8, len(rng)),
-            "wind_speed_10m": np.abs(np.random.normal(5, 3, len(rng))),
-            "shortwave_radiation": np.abs(np.random.normal(100, 80, len(rng))),
-            "country": country,
-        }
-    )
+    return pd.DataFrame({
+        "timestamp": rng,
+        "temperature_2m": np.random.normal(12, 8, len(rng)),
+        "wind_speed_10m": np.abs(np.random.normal(5, 3, len(rng))),
+        "shortwave_radiation": np.abs(np.random.normal(100, 80, len(rng))),
+        "country": country,
+    })
 
 
 def build_feature_dataset(
@@ -183,8 +179,16 @@ def build_feature_dataset(
     load_df = fetch_entso_load(country=country, start=start, end=end)
     weather_df = fetch_weather(country=country, start=start, end=end)
 
-    load_df["timestamp"] = pd.to_datetime(load_df["timestamp"]).dt.tz_localize(None)
-    weather_df["timestamp"] = pd.to_datetime(weather_df["timestamp"]).dt.tz_localize(None)
+    # Strip timezone safely: convert to UTC first if tz-aware, then remove tz
+    def _to_naive(series: object) -> object:
+        import pandas as pd
+        s = pd.to_datetime(series)
+        if s.dt.tz is not None:
+            s = s.dt.tz_convert("UTC").dt.tz_localize(None)
+        return s.dt.floor("h")  # floor to hour to ensure alignment
+
+    load_df["timestamp"]    = _to_naive(load_df["timestamp"])
+    weather_df["timestamp"] = _to_naive(weather_df["timestamp"])
 
     df = pd.merge(load_df, weather_df.drop(columns=["country"]), on="timestamp", how="inner")
     df["hour_of_day"] = df["timestamp"].dt.hour

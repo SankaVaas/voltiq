@@ -1,8 +1,7 @@
 """api/routers/forecast.py"""
-
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 from fastapi import APIRouter
@@ -15,7 +14,7 @@ router = APIRouter()
 @router.post("/forecast", response_model=ForecastResponse)
 async def get_forecast(request: ForecastRequest) -> ForecastResponse:
     horizon = request.horizon_hours
-    now = datetime.utcnow()
+    now = datetime.now(UTC).replace(tzinfo=None)
     timestamps = [(now + timedelta(hours=i)).isoformat() for i in range(horizon)]
     base = 47_000
     hours = np.arange(horizon)

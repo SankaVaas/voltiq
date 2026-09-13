@@ -167,7 +167,7 @@ def train(
         dict with best_val_mae, best_epoch, run_id
     """
     # ── Load data ──────────────────────────────────────────────────────────
-    from datetime import datetime, timedelta
+    from datetime import UTC, datetime, timedelta
 
     from data.ingest import build_feature_dataset
 
@@ -175,7 +175,7 @@ def train(
         epochs = 1
         batch_size = 4
 
-    end = datetime.utcnow()
+    end = datetime.now(UTC).replace(tzinfo=None)
     start = end - timedelta(days=60 if fast_dev else 365)
     logger.info("Loading feature dataset", country=country, start=str(start.date()))
 

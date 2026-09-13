@@ -1,6 +1,5 @@
 """api/routers/ingest.py"""
-
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter
 
@@ -16,7 +15,7 @@ async def trigger_ingest(request: IngestRequest) -> IngestResponse:
     from data.ingest import build_feature_dataset
 
     try:
-        end = datetime.utcnow()
+        end = datetime.now(UTC).replace(tzinfo=None)
         start = end - timedelta(days=request.days_back)
         df = build_feature_dataset(country=request.country, start=start, end=end)
         return IngestResponse(
